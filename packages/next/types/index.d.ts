@@ -37,10 +37,11 @@ export interface OctaneNextOptions {
 	/** Project root used to canonicalize compiler module IDs. Defaults to `process.cwd()`. */
 	root?: string;
 	/**
-	 * Keep Next's React-owned Flight and App Router runtime while Octane owns
-	 * application island descendants.
+	 * `"hybrid"` keeps Next's React-owned Flight and App Router runtime while
+	 * Octane owns application island descendants. `"native"` replaces the
+	 * browser root with the experimental Octane island runtime.
 	 */
-	runtime?: 'hybrid';
+	runtime?: 'hybrid' | 'native';
 }
 
 export declare function createOctanePlugin(options?: OctaneNextOptions): {

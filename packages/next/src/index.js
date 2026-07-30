@@ -20,6 +20,7 @@ function loaderRule(
 	profile,
 	diagnostics,
 	clientComponents,
+	runtime,
 	outputType,
 	sourceCondition,
 ) {
@@ -42,6 +43,7 @@ function loaderRule(
 					profile,
 					diagnostics,
 					clientComponents,
+					...(runtime === 'native' ? { native: true } : null),
 				},
 			},
 		],
@@ -163,10 +165,8 @@ export function createOctanePlugin(options = {}) {
 	if (clientComponents !== 'directive' && clientComponents !== 'all') {
 		throw new TypeError('[@octanejs/next] clientComponents must be "directive" or "all".');
 	}
-	if (runtime !== 'hybrid') {
-		throw new Error(
-			'[@octanejs/next] Only runtime: "hybrid" is implemented. Native App Router ownership requires an upstream Next.js client-runtime entrypoint.',
-		);
+	if (runtime !== 'hybrid' && runtime !== 'native') {
+		throw new TypeError('[@octanejs/next] runtime must be "hybrid" or "native".');
 	}
 	if (typeof root !== 'string' || !isAbsolute(root)) {
 		throw new TypeError('[@octanejs/next] root must be a non-empty absolute project path.');
@@ -183,6 +183,7 @@ export function createOctanePlugin(options = {}) {
 				profile,
 				diagnostics,
 				clientComponents,
+				runtime,
 				outputType,
 				sourceCondition,
 			),
@@ -193,6 +194,7 @@ export function createOctanePlugin(options = {}) {
 				profile,
 				diagnostics,
 				clientComponents,
+				runtime,
 				outputType,
 				sourceCondition,
 			),
@@ -203,6 +205,7 @@ export function createOctanePlugin(options = {}) {
 				false,
 				diagnostics,
 				clientComponents,
+				runtime,
 				outputType,
 				sourceCondition,
 			),
@@ -213,6 +216,7 @@ export function createOctanePlugin(options = {}) {
 				false,
 				diagnostics,
 				clientComponents,
+				runtime,
 				outputType,
 				sourceCondition,
 			),
@@ -251,6 +255,14 @@ export function createOctanePlugin(options = {}) {
 			...nextConfig,
 			turbopack: {
 				...turbopack,
+				...(runtime === 'native'
+					? {
+							clientRuntime: {
+								entry: '@octanejs/next/native-runtime',
+								reactDom: '@octanejs/next/react-dom',
+							},
+						}
+					: null),
 				...(turbopackRoot === undefined ? null : { root: turbopackRoot }),
 				resolveAlias: {
 					...workspaceRuntime.aliases,

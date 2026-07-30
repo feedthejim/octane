@@ -217,7 +217,7 @@ describe('withOctane', () => {
 		}
 	});
 
-	it('composes with existing Turbopack rules and rejects the unavailable native runtime', () => {
+	it('composes with existing Turbopack rules and configures the native runtime seam', () => {
 		const existingTsxRule = {
 			condition: { content: /use workflow/ },
 			loaders: ['workflow-loader'],
@@ -267,9 +267,19 @@ describe('withOctane', () => {
 		expect(reapplied.turbopack?.rules?.['*.tsx']).toHaveLength(5);
 		expect(reapplied.turbopack?.rules?.['*.tsrx']).toHaveLength(5);
 
-		expect(() => createOctanePlugin({ runtime: 'native' as 'hybrid' })).toThrow(
-			/Only runtime: "hybrid" is implemented/,
-		);
+		const native = createOctanePlugin({ runtime: 'native' })({});
+		expect(native.turbopack).toMatchObject({
+			clientRuntime: {
+				entry: '@octanejs/next/native-runtime',
+				reactDom: '@octanejs/next/react-dom',
+			},
+		});
+		for (const rule of native.turbopack?.rules?.['*.tsx'] as Array<{
+			loaders: Array<{ options: Record<string, unknown> }>;
+		}>) {
+			expect(rule.loaders[0].options.native).toBe(true);
+		}
+		expect(() => createOctanePlugin({ runtime: 'other' as 'hybrid' })).toThrow(/runtime/);
 		expect(() => createOctanePlugin({ clientComponents: 'octane' as 'all' })).toThrow(
 			/clientComponents/,
 		);

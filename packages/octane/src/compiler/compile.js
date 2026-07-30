@@ -2799,6 +2799,14 @@ function applyReactHostedBoundary(body, componentNames, option, ctx, origin) {
 			'compile option reactHostedBoundary.compatModule must be a non-empty module specifier.',
 		);
 	}
+	if (
+		option.nativeModuleId !== undefined &&
+		(typeof option.nativeModuleId !== 'string' || option.nativeModuleId.length === 0)
+	) {
+		throw new TypeError(
+			'compile option reactHostedBoundary.nativeModuleId must be a non-empty string when provided.',
+		);
+	}
 
 	const directives = [];
 	const rewritten = [];
@@ -2950,12 +2958,25 @@ function applyReactHostedBoundary(body, componentNames, option, ctx, origin) {
 
 	const createElementName = allocCompilerName(ctx, '_$reactCreateElement');
 	const compatName = allocCompilerName(ctx, '_$OctaneCompat');
+	const registerName =
+		option.nativeModuleId === undefined ? null : allocCompilerName(ctx, '_$registerOctaneBoundary');
 	const imports = [
 		inheritOriginLoc(b.imports([['createElement', createElementName]], 'react'), origin),
-		inheritOriginLoc(b.imports([['OctaneCompat', compatName]], option.compatModule), origin),
+		inheritOriginLoc(
+			b.imports(
+				[
+					['OctaneCompat', compatName],
+					...(registerName === null ? [] : [['registerOctaneBoundary', registerName]]),
+				],
+				option.compatModule,
+			),
+			origin,
+		),
 	];
 	const facades = [];
 	for (const entry of hostedExports) {
+		const nativeId =
+			option.nativeModuleId === undefined ? null : `${option.nativeModuleId}#${entry.exported}`;
 		const wrapperName = allocCompilerName(
 			ctx,
 			entry.exported === 'default' ? '_$OctaneDefaultFacade' : `_$Octane${entry.exported}Facade`,
@@ -2974,6 +2995,7 @@ function applyReactHostedBoundary(body, componentNames, option, ctx, origin) {
 								b.object([
 									b.init('component', b.id(entry.local)),
 									b.init('props', b.id(propsName)),
+									...(nativeId === null ? [] : [b.init('__octaneNativeId', b.literal(nativeId))]),
 								]),
 							),
 						),
@@ -2982,6 +3004,16 @@ function applyReactHostedBoundary(body, componentNames, option, ctx, origin) {
 				entry.origin,
 			),
 		);
+		if (registerName !== null && nativeId !== null) {
+			facades.push(
+				inheritOriginLoc(
+					b.stmt(
+						b.call(b.id(registerName), b.literal(nativeId), b.id(entry.local), b.id(wrapperName)),
+					),
+					entry.origin,
+				),
+			);
+		}
 		facades.push(
 			inheritOriginLoc(
 				entry.exported === 'default'
@@ -5481,7 +5513,7 @@ function instrumentProfileComponents(ast, ctx) {
  * Compile a .tsrx source string into JS targeting `octane`.
  * @param {string} source
  * @param {string} filename
- * @param {{ hmr?: boolean | 'vite' | 'webpack', mode?: 'client' | 'server', dev?: boolean, profile?: boolean, profileFilename?: string, autoMemo?: boolean, inlineHookMemo?: boolean, migrateReactImports?: boolean, reactHostedBoundary?: { compatModule: string }, renderer?: { id: string, module: string, target: 'dom' | 'universal', server?: string }, rendererBoundaries?: Readonly<Record<string, Readonly<Record<string, { ownerRenderer: string, childRenderer: string, prop: string, server?: string }>>>>, rendererRegistry?: Readonly<Record<string, { module: string, target: 'dom' | 'universal', server?: string }>>, clientOnlyImports?: readonly unknown[], __hydratePrepared?: boolean, __hydrateBoundaryModule?: boolean, __nativeChangeDiagnostics?: readonly unknown[], __nativeChangeAnalysis?: { diagnostics: readonly unknown[], classifications: Map<number, string> } }} [options] —
+ * @param {{ hmr?: boolean | 'vite' | 'webpack', mode?: 'client' | 'server', dev?: boolean, profile?: boolean, profileFilename?: string, autoMemo?: boolean, inlineHookMemo?: boolean, migrateReactImports?: boolean, reactHostedBoundary?: { compatModule: string, nativeModuleId?: string }, renderer?: { id: string, module: string, target: 'dom' | 'universal', server?: string }, rendererBoundaries?: Readonly<Record<string, Readonly<Record<string, { ownerRenderer: string, childRenderer: string, prop: string, server?: string }>>>>, rendererRegistry?: Readonly<Record<string, { module: string, target: 'dom' | 'universal', server?: string }>>, clientOnlyImports?: readonly unknown[], __hydratePrepared?: boolean, __hydrateBoundaryModule?: boolean, __nativeChangeDiagnostics?: readonly unknown[], __nativeChangeAnalysis?: { diagnostics: readonly unknown[], classifications: Map<number, string> } }} [options] —
  *   `dev: true` emits client hydration source-location metadata (per-component
  *   `__s.locs`/`__s.locFile`) and, in server mode, source-located native-element
  *   scopes for invalid HTML nesting diagnostics. Both are strictly gated so

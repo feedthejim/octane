@@ -89,6 +89,31 @@ directive-only selection, profiling, or a custom compiler root. Normal Next
 applications should use `withOctane(nextConfig)` without Octane-specific
 configuration.
 
+## Native client prototype
+
+The experimental native mode replaces Next's React App Router browser entry
+with an Octane island runtime:
+
+```ts
+import { createOctanePlugin } from '@octanejs/next';
+
+export default createOctanePlugin({ runtime: 'native' })({
+	cacheComponents: true,
+});
+```
+
+This mode requires a Next.js build with the Turbopack `clientRuntime` seam.
+Server Components, Flight, Cache Components, PPR, and server rendering remain
+owned by Next. The browser decodes the initial Flight payload only to discover
+client references, then hydrates compiler-proven Octane boundaries directly
+against their server-rendered hosts. It does not mount ReactDOM or the React App
+Router root.
+
+Native mode is intended to measure and shape the replacement architecture. It
+currently uses document navigation for links. Server Actions, client router
+state, prefetching, connected View Transitions, and React-owned effects are not
+implemented. Unsupported React boundaries remain as static server HTML.
+
 Default and namespace React imports, unsupported React APIs, `react-dom/client`,
 and other React subpaths fail at build time with an instruction to use named
 imports or add `"use react"`.
@@ -132,5 +157,7 @@ imports or add `"use react"`.
   Octane binding.
 - Fast Refresh currently falls back to the host's module invalidation behavior;
   Octane's webpack-dialect HMR output is disabled under Turbopack.
-- Native, React-free App Router ownership is not implemented. It requires a
-  selectable client-runtime entrypoint in Next.js.
+- Native mode replaces the ReactDOM/App Router client root but does not yet
+  guarantee a React-free module graph. Flight-discovered unsupported client
+  references can still load React-shaped modules even though they are not
+  rendered.

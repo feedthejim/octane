@@ -39,6 +39,18 @@
       "browser": "./src/compat.client.js",
       "default": "./src/compat.server.js"
     },
+    "./native-runtime": {
+      "browser": "./src/native-runtime.js",
+      "default": "./src/native-runtime.js"
+    },
+    "./react-dom": {
+      "browser": "./src/react-dom.js",
+      "default": "./src/react-dom.js"
+    },
+    "./react-dom/client": {
+      "browser": "./src/react-dom-client.js",
+      "default": "./src/react-dom-client.js"
+    },
     "./loader": {
       "types": "./types/loader.d.ts",
       "import": "./src/loader.js",

@@ -250,6 +250,11 @@ function cleanResource(context) {
 	return queryIndex === -1 ? resource : resource.slice(0, queryIndex);
 }
 
+function nativeModuleId(root, resource) {
+	const path = resource.slice(root.length).replaceAll('\\', '/');
+	return path.startsWith('/') ? path.slice(1) : path;
+}
+
 function optOutOfReactCompiler(source) {
 	// Next applies React Compiler after custom Turbopack loaders. Its memo-cache
 	// calls are React hooks and cannot execute inside an Octane-owned component
@@ -347,6 +352,9 @@ export default function octaneNextLoader(source, inputSourceMap) {
 				? {
 						reactHostedBoundary: {
 							compatModule: '@octanejs/next/compat',
+							...(options.native === true
+								? { nativeModuleId: nativeModuleId(options.root, resource) }
+								: null),
 						},
 					}
 				: null),

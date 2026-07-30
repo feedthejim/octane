@@ -91,6 +91,36 @@ describe('@octanejs/next Turbopack loader', () => {
 		expect(output.result.content).toBe(`'use client'; export function Counter() {}`);
 	});
 
+	it('adds stable native boundary metadata only for the native runtime', () => {
+		mocks.transform.mockReturnValue({
+			code: `'use client'; export function Counter() {}`,
+			map: null,
+			kind: 'compile',
+			dependencies: [],
+			missingDependencies: [],
+		});
+		const output = runLoader({
+			options: {
+				root: '/project',
+				environment: 'client',
+				dev: false,
+				profile: false,
+				native: true,
+			},
+		});
+		expect(output.result.error).toBeNull();
+		expect(mocks.transform).toHaveBeenCalledWith(
+			expect.any(String),
+			'/project/app/Counter.tsx',
+			expect.objectContaining({
+				reactHostedBoundary: {
+					compatModule: '@octanejs/next/compat',
+					nativeModuleId: 'app/Counter.tsx',
+				},
+			}),
+		);
+	});
+
 	it('compiles the server copy of a client boundary with the same hosted export contract', () => {
 		mocks.transform.mockReturnValue({
 			code: 'export const Counter = compiled;',
