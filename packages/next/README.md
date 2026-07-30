@@ -48,12 +48,12 @@ select a JSX namespace from a custom directive, so add
 types such as `class` composition or ref arrays. Boundaries using the JSX subset
 shared with React do not need the pragma.
 
-Next still owns React Server Components, Flight, App Router navigation, Cache
-Components, and the root React hydration lifecycle. The integration generates a
-normal Next client-reference facade for each `.tsx` module with both directives.
-React owns one opaque host element per facade instance; Octane owns every
-descendant. React Compiler can remain enabled: Octane-owned modules opt out of
-its post-loader transform automatically.
+In hybrid mode, Next still owns React Server Components, Flight, App Router
+navigation, Cache Components, and the root React hydration lifecycle. The
+integration generates a normal Next client-reference facade for each `.tsx`
+module with both directives. React owns one opaque host element per facade
+instance; Octane owns every descendant. React Compiler can remain enabled:
+Octane-owned modules opt out of its post-loader transform automatically.
 
 ## Automatic client-boundary migration
 
@@ -97,22 +97,29 @@ with an Octane island runtime:
 ```ts
 import { createOctanePlugin } from '@octanejs/next';
 
-export default createOctanePlugin({ runtime: 'native' })({
-	cacheComponents: true,
-});
+export default createOctanePlugin({ runtime: 'native' })({});
 ```
 
 This mode requires a Next.js build with the Turbopack `clientRuntime` seam.
-Server Components, Flight, Cache Components, PPR, and server rendering remain
-owned by Next. The browser decodes the initial Flight payload only to discover
-client references, then hydrates compiler-proven Octane boundaries directly
-against their server-rendered hosts. It does not mount ReactDOM or the React App
-Router root.
+Native mode enables Cache Components as part of its renderer contract. Server
+Components, Cache Components, PPR, and server rendering remain owned by Next.
+The server emits a compact route-local client-reference resume table
+instead of a browser Flight payload. The client loads those modules through the
+Turbopack runtime and hydrates compiler-proven Octane boundaries directly
+against their server-rendered hosts. It does not mount ReactDOM, decode RSDW, or
+start the React App Router root.
 
-Native mode is intended to measure and shape the replacement architecture. It
-currently uses document navigation for links. Server Actions, client router
-state, prefetching, connected View Transitions, and React-owned effects are not
-implemented. Unsupported React boundaries remain as static server HTML.
+Navigation is same-document and HTML based. The native router prefetches on
+intent, maintains a bounded document cache, swaps the server-rendered body,
+synchronizes metadata and route styles, reactivates Octane boundaries, handles
+push/replace/back/forward/refresh, and uses browser View Transitions with types
+from `data-octane-transition`. It is exposed through `window.next.router`.
+
+Incompatible automatic boundaries become server-static facades in the native
+client graph. Their server HTML remains authoritative, while explicitly
+Octane-owned child imports still register and hydrate. This keeps unsupported
+React and Next client APIs out of the shipped browser graph instead of loading
+them without a React root.
 
 Default and namespace React imports, unsupported React APIs, `react-dom/client`,
 and other React subpaths fail at build time with an instruction to use named
@@ -141,8 +148,9 @@ imports or add `"use react"`.
 - `export *`, component re-exports, and imported component exports are rejected
   at the boundary because the loader cannot prove their runtime ownership.
   Define a local wrapper component or keep that boundary on React.
-- React Server Component children cannot yet render as slots inside an Octane
-  island.
+- React Server Component children cannot yet render as live slots inside an
+  Octane island. In native mode the containing boundary remains server-static
+  and is refreshed by HTML navigation.
 - Automatic mode keeps boundaries importing React's `ViewTransition` on React
   because connected transitions require one renderer to own the coordination
   graph. Add `"use octane"` only when isolated Octane transition semantics are
@@ -157,7 +165,7 @@ imports or add `"use react"`.
   Octane binding.
 - Fast Refresh currently falls back to the host's module invalidation behavior;
   Octane's webpack-dialect HMR output is disabled under Turbopack.
-- Native mode replaces the ReactDOM/App Router client root but does not yet
-  guarantee a React-free module graph. Flight-discovered unsupported client
-  references can still load React-shaped modules even though they are not
-  rendered.
+- Native mode does not implement the React Server Action client protocol.
+  Ordinary links, history, metadata, styles, prefetching, View Transitions, and
+  Octane-owned effects are supported. Boundaries that depend on React-only
+  client behavior remain server-static.

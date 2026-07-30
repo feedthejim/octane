@@ -118,6 +118,24 @@ describe('React-hosted client-boundary compiler output', () => {
 		});
 	}
 
+	it('emits a registration-only facade for native client boundaries', () => {
+		const result = compile(SOURCE, '/project/app/Card.tsrx', {
+			mode: 'client',
+			hmr: false,
+			reactHostedBoundary: {
+				compatModule: '@fixture/octane-compat',
+				nativeModuleId: 'app/Card.tsrx',
+				nativeClient: true,
+			},
+		} as any);
+
+		expect(result.code).toContain('registerOctaneBoundary');
+		expect(result.code).toContain(`'app/Card.tsrx#Counter'`);
+		expect(result.code).not.toContain(`from 'react'`);
+		expect(result.code).not.toContain('OctaneCompat');
+		expect(result.code).not.toContain('__octaneNativeId');
+	});
+
 	it('rejects an anonymous default because it cannot retain the Octane implementation identity', () => {
 		expect(() =>
 			compile(`'use client'; 'use octane'; export default () => <div />;`, '/app/Card.tsx', {

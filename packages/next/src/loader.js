@@ -64,7 +64,7 @@ function hasProvenOctaneOwnership(resource, request, context) {
 	if (importedResource.endsWith('.tsrx')) return true;
 	const source = readFileSync(importedResource, 'utf8');
 	const boundary = inspectBoundaryDirectives(source, importedResource);
-	return boundary.octane && !boundary.client;
+	return boundary.octane;
 }
 
 function automaticReactFallbackReason(ast, resource, context) {
@@ -166,6 +166,91 @@ function keepOnReact(context, callback, source, inputSourceMap, resource, reason
 		context.emitWarning?.(warning);
 	}
 	callback(null, source, context.sourceMap === false ? undefined : inputSourceMap);
+}
+
+function bindingNames(pattern, names) {
+	if (pattern == null) return;
+	if (pattern.type === 'Identifier') {
+		names.add(pattern.name);
+		return;
+	}
+	if (pattern.type === 'RestElement') {
+		bindingNames(pattern.argument, names);
+		return;
+	}
+	if (pattern.type === 'AssignmentPattern') {
+		bindingNames(pattern.left, names);
+		return;
+	}
+	for (const property of pattern.properties ?? pattern.elements ?? []) {
+		if (property == null) continue;
+		bindingNames(property.value ?? property.argument ?? property, names);
+	}
+}
+
+function nativeStaticBoundarySource(ast, resource, context) {
+	const sideEffects = new Set();
+	const exported = new Set();
+	let hasDefault = false;
+	for (const statement of ast.body ?? []) {
+		if (statement.type === 'ImportDeclaration') {
+			const request = statement.source?.value;
+			if (
+				typeof request === 'string' &&
+				isRelativeRequest(request) &&
+				valueImportSpecifiers(statement).length > 0 &&
+				hasProvenOctaneOwnership(resource, request, context)
+			) {
+				sideEffects.add(request);
+			}
+			continue;
+		}
+		if (statement.type === 'ExportAllDeclaration') return null;
+		if (statement.type === 'ExportDefaultDeclaration') {
+			hasDefault = true;
+			continue;
+		}
+		if (statement.type !== 'ExportNamedDeclaration' || statement.exportKind === 'type') {
+			continue;
+		}
+		const declaration = statement.declaration;
+		if (
+			(declaration?.type === 'FunctionDeclaration' || declaration?.type === 'ClassDeclaration') &&
+			declaration.id?.name
+		) {
+			exported.add(declaration.id.name);
+		}
+		if (declaration?.type === 'VariableDeclaration') {
+			for (const item of declaration.declarations ?? []) bindingNames(item.id, exported);
+		}
+		for (const specifier of statement.specifiers ?? []) {
+			const name = specifier.exported?.name ?? specifier.exported?.value;
+			if (typeof name === 'string') exported.add(name);
+		}
+	}
+	const lines = [
+		`'use client';`,
+		...Array.from(sideEffects, (request) => `import ${JSON.stringify(request)};`),
+		'function __octaneStaticBoundary() { return null; }',
+		...Array.from(exported, (name) => `export { __octaneStaticBoundary as ${name} };`),
+		...(hasDefault ? ['export default __octaneStaticBoundary;'] : []),
+	];
+	return `${lines.join('\n')}\n`;
+}
+
+function keepStaticInNativeRuntime(context, callback, ast, resource, reason, diagnostics) {
+	const source = nativeStaticBoundarySource(ast, resource, context);
+	if (source === null) return false;
+	if (diagnostics) {
+		const warning = new Error(
+			`[@octanejs/next] Rendering ${resource} as a server-static boundary in the native runtime: ${reason}.`,
+		);
+		warning.code = 'OCTANE_NEXT_NATIVE_STATIC_BOUNDARY';
+		warning.filename = resource;
+		context.emitWarning?.(warning);
+	}
+	callback(null, source, undefined);
+	return true;
 }
 
 function validateHostedBoundaryExports(ast, filename) {
@@ -314,6 +399,20 @@ export default function octaneNextLoader(source, inputSourceMap) {
 			if (clientComponents === 'all' && clientBoundary && !boundary.octane) {
 				const fallbackReason = automaticReactFallbackReason(boundary.ast, resource, this);
 				if (fallbackReason !== null) {
+					if (
+						options.native === true &&
+						options.environment === 'client' &&
+						keepStaticInNativeRuntime(
+							this,
+							callback,
+							boundary.ast,
+							resource,
+							fallbackReason,
+							options.diagnostics === true,
+						)
+					) {
+						return;
+					}
 					keepOnReact(
 						this,
 						callback,
@@ -351,9 +450,15 @@ export default function octaneNextLoader(source, inputSourceMap) {
 			...(clientBoundary
 				? {
 						reactHostedBoundary: {
-							compatModule: '@octanejs/next/compat',
+							compatModule:
+								options.native === true && environment === 'client'
+									? '@octanejs/next/native-registry'
+									: '@octanejs/next/compat',
 							...(options.native === true
-								? { nativeModuleId: nativeModuleId(options.root, resource) }
+								? {
+										nativeModuleId: nativeModuleId(options.root, resource),
+										...(environment === 'client' ? { nativeClient: true } : null),
+									}
 								: null),
 						},
 					}

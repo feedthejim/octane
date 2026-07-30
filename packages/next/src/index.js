@@ -253,6 +253,7 @@ export function createOctanePlugin(options = {}) {
 
 		return {
 			...nextConfig,
+			...(runtime === 'native' ? { cacheComponents: true } : null),
 			turbopack: {
 				...turbopack,
 				...(runtime === 'native'
@@ -260,6 +261,7 @@ export function createOctanePlugin(options = {}) {
 							clientRuntime: {
 								entry: '@octanejs/next/native-runtime',
 								reactDom: '@octanejs/next/react-dom',
+								clientReferences: 'resume',
 							},
 						}
 					: null),

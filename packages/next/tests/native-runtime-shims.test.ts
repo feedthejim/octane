@@ -9,6 +9,10 @@ import {
 	resolveOctaneBoundary,
 	subscribeOctaneBoundaries,
 } from '../src/native-registry.js';
+import {
+	readClientReferenceResumeEntries,
+	shouldHandleNavigationClick,
+} from '../src/native-navigation.js';
 
 describe('native client runtime shims', () => {
 	it('supports the named and default ReactDOM contracts used by Next client modules', () => {
@@ -36,5 +40,50 @@ describe('native client runtime shims', () => {
 		});
 		expect(resolveOctaneBoundary(facade)?.component).toBe(component);
 		expect(listener).toHaveBeenCalledOnce();
+	});
+
+	it('reads the compact resume manifest without evaluating bootstrap code', () => {
+		const nextDocument = {
+			scripts: [
+				{
+					textContent:
+						'self.__next_r="request";self.__next_client_reference_resume__=[["[project]/app/card.tsx",17,["/_next/card.js"],false]];self.after=true',
+				},
+			],
+		} as unknown as Document;
+
+		expect(readClientReferenceResumeEntries(nextDocument)).toEqual([
+			['[project]/app/card.tsx', 17, ['/_next/card.js'], false],
+		]);
+		expect((globalThis as { after?: boolean }).after).toBeUndefined();
+	});
+
+	it('intercepts only unmodified same-origin document navigations', () => {
+		const anchor = {
+			dataset: {},
+			hasAttribute: () => false,
+			href: 'https://example.com/read',
+			target: '',
+		} as unknown as HTMLAnchorElement;
+		const currentLocation = new URL('https://example.com/') as unknown as Location;
+		const click = {
+			defaultPrevented: false,
+			button: 0,
+			metaKey: false,
+			ctrlKey: false,
+			shiftKey: false,
+			altKey: false,
+		} as MouseEvent;
+
+		expect(shouldHandleNavigationClick(click, anchor, currentLocation)).toBe(true);
+		expect(
+			shouldHandleNavigationClick(
+				{ ...click, metaKey: true } as MouseEvent,
+				anchor,
+				currentLocation,
+			),
+		).toBe(false);
+		anchor.href = 'https://elsewhere.example/read';
+		expect(shouldHandleNavigationClick(click, anchor, currentLocation)).toBe(false);
 	});
 });

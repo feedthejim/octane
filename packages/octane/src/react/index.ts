@@ -616,6 +616,7 @@ export function OctaneCompat(
 
 	return React.createElement('div', {
 		'data-octane-compat': '',
+		'data-octane-identifier-prefix': identifierPrefix,
 		ref: hostRef,
 		style: OPAQUE_HOST_STYLE,
 		// §9.3 opaque-host contract: the server writes real island HTML; the

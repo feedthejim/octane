@@ -20,6 +20,10 @@ import { createLog } from '../_helpers.js';
 import { h, mountReactHost, reactAct } from './_react-host.js';
 import { __setHostFiberAdapterEnabled } from '../../src/react/fiber-adapter.js';
 import {
+	createElement as createOctaneElement,
+	hydrateRoot as hydrateOctaneRoot,
+} from '../../src/runtime.js';
+import {
 	SsrAsync as ClientSsrAsync,
 	SsrGreeting as ClientSsrGreeting,
 	SsrIdIsland as ClientSsrIdIsland,
@@ -148,6 +152,47 @@ describe('octane/react/server — buffered SSR + client hydration (§9.3)', () =
 		await reactAct(async () => (serverButton as HTMLElement).click());
 		expect(host.querySelector('.ssr-count')?.textContent).toBe('clicks:1');
 		await mounted.unmount();
+	});
+
+	it('publishes the server id prefix so a native Octane client can adopt the island directly', () => {
+		function nativeHostedEnvelope(props: {
+			body: unknown;
+			bodyProps: unknown;
+			bodyKey: string | null;
+		}) {
+			const config =
+				props.bodyKey === null
+					? props.bodyProps
+					: { ...(props.bodyProps as object), key: props.bodyKey };
+			return createOctaneElement(props.body as never, config as never);
+		}
+		const serverHtml = reactRenderToString(
+			h(OctaneCompatServer, {
+				component: server.SsrGreeting,
+				props: { name: 'native' },
+			} as any),
+		);
+		const container = document.createElement('div');
+		container.innerHTML = serverHtml;
+		const host = container.querySelector('[data-octane-compat]') as HTMLElement;
+		const serverNode = host.querySelector('.ssr-count');
+		const identifierPrefix = host.dataset.octaneIdentifierPrefix;
+
+		expect(identifierPrefix).toBeTypeOf('string');
+		const root = hydrateOctaneRoot(
+			host,
+			nativeHostedEnvelope as any,
+			{
+				body: ClientSsrGreeting,
+				bodyProps: { name: 'native' },
+				bodyKey: null,
+			},
+			{ identifierPrefix },
+		);
+
+		expect(host.querySelector('.ssr-count')).toBe(serverNode);
+		expect(host.querySelectorAll('.ssr-count')).toHaveLength(1);
+		root.unmount();
 	});
 
 	it('server-renders the component/props form byte-identically to the children form and hydrates it', async () => {

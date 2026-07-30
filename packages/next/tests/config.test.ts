@@ -268,6 +268,7 @@ describe('withOctane', () => {
 		expect(reapplied.turbopack?.rules?.['*.tsrx']).toHaveLength(5);
 
 		const native = createOctanePlugin({ runtime: 'native' })({});
+		expect((native as { cacheComponents?: boolean }).cacheComponents).toBe(true);
 		expect(native.turbopack).toMatchObject({
 			clientRuntime: {
 				entry: '@octanejs/next/native-runtime',

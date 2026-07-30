@@ -114,8 +114,9 @@ describe('@octanejs/next Turbopack loader', () => {
 			'/project/app/Counter.tsx',
 			expect.objectContaining({
 				reactHostedBoundary: {
-					compatModule: '@octanejs/next/compat',
+					compatModule: '@octanejs/next/native-registry',
 					nativeModuleId: 'app/Counter.tsx',
+					nativeClient: true,
 				},
 			}),
 		);
@@ -371,6 +372,38 @@ describe('@octanejs/next Turbopack loader', () => {
 			}),
 		);
 		expect(mocks.createOctaneCompiler).not.toHaveBeenCalled();
+	});
+
+	it('turns unsupported native boundaries into static facades and preserves Octane child registration', () => {
+		const root = mkdtempSync(join(tmpdir(), 'octane-next-native-static-'));
+		const resource = join(root, 'Nav.tsx');
+		const child = join(root, 'Theme.tsx');
+		writeFileSync(
+			child,
+			`'use client'; 'use octane'; export function Theme() { return <button />; }`,
+		);
+		try {
+			const output = runLoader({
+				resource,
+				options: {
+					root,
+					environment: 'client',
+					dev: false,
+					profile: false,
+					clientComponents: 'all',
+					native: true,
+				},
+				source: `'use client'; import { usePathname } from 'next/navigation'; import { Theme } from './Theme'; export function Nav() { return <nav><Theme />{usePathname()}</nav>; }`,
+			});
+			expect(output.result.error).toBeNull();
+			expect(output.result.content).toContain(`import "./Theme";`);
+			expect(output.result.content).toContain('export { __octaneStaticBoundary as Nav };');
+			expect(output.result.content).not.toContain('next/navigation');
+			expect(output.dependencies).toContain(child);
+			expect(mocks.createOctaneCompiler).not.toHaveBeenCalled();
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it('keeps a children-owning automatic boundary on React', () => {

@@ -43,6 +43,10 @@
       "browser": "./src/native-runtime.js",
       "default": "./src/native-runtime.js"
     },
+    "./native-registry": {
+      "browser": "./src/native-registry.js",
+      "default": "./src/native-registry.js"
+    },
     "./react-dom": {
       "browser": "./src/react-dom.js",
       "default": "./src/react-dom.js"
