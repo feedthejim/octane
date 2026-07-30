@@ -12,14 +12,13 @@ export default withOctane({
 });
 ```
 
-By default, every application `.tsx` module with `"use client"` is considered
-for Octane compilation. Compatible modules migrate automatically. Modules whose
-React ownership cannot be proven quietly remain on React, and `"use react"` is
-the explicit escape hatch. Set `diagnostics: true` or
-`OCTANE_NEXT_DIAGNOSTICS=1` to explain each fallback during integration work.
+By default, React remains responsible for ordinary `"use client"` modules.
+Add `"use octane"` to a substantial client boundary when its rendering work
+justifies loading the Octane runtime on that route. Initial routes without an
+Octane boundary keep the same client graph as the unmodified Next application.
 
-`"use octane"` forces Octane ownership. Add it beside Next's client directive
-when deliberately overriding the conservative compatibility planner.
+`"use octane"` selects Octane ownership. Add it beside Next's client directive
+on a direct client boundary.
 The physical `.tsx` module identity lets Next register the module in its Flight
 client manifest while Octane replaces only its component exports with React
 facades:
@@ -58,8 +57,9 @@ its post-loader transform automatically.
 ## Automatic client-boundary migration
 
 Supported named imports from `react` and `react-dom` are rewritten to `octane`
-before hook and component analysis in automatic mode and in any explicitly
-`"use octane"` `.tsx` module:
+before hook and component analysis in any explicitly `"use octane"` `.tsx`
+module. Advanced integrations can enable automatic migration with
+`createOctanePlugin({ clientComponents: 'all' })`:
 
 ```tsx
 'use client';
@@ -85,9 +85,14 @@ modules with `"use octane"` so both their browser and server-render copies are
 compiled. Automatic mode also migrates their supported React imports.
 
 Advanced integrations can use `createOctanePlugin(options)` to opt into
-directive-only selection, profiling, or a custom compiler root. Normal Next
-applications should use `withOctane(nextConfig)` without Octane-specific
+automatic selection, diagnostics, profiling, or a custom compiler root. Normal
+Next applications should use `withOctane(nextConfig)` without Octane-specific
 configuration.
+
+Next may eagerly fetch all client chunks referenced by a prefetched route. If
+an Octane route is linked from a React-only page, use the link's prefetch policy
+to decide whether instant navigation or keeping the optional runtime off the
+current page is more important.
 
 Default and namespace React imports, unsupported React APIs, `react-dom/client`,
 and other React subpaths fail at build time with an instruction to use named
@@ -100,9 +105,9 @@ imports or add `"use react"`.
   `.js` client boundaries remain on React.
 - The Node.js App Router runtime is covered by the integration fixture. Edge
   runtime compilation is not configured yet.
-- Every direct `"use client"` boundary is considered automatically unless it
-  adds `"use react"`. A forced direct boundary uses both `"use client"` and
-  `"use octane"`; a transitive compiled module uses `"use octane"` alone.
+- A direct Octane boundary uses both `"use client"` and `"use octane"`; a
+  transitive compiled module uses `"use octane"` alone. Automatic mode
+  considers every direct `"use client"` boundary unless it adds `"use react"`.
 - Next currently re-addresses custom loader output as a virtual `*.tsrx.js`
   module that its Flight graph cannot resolve, so direct `.tsrx` boundaries are
   rejected with an actionable error.
@@ -118,6 +123,11 @@ imports or add `"use react"`.
   Define a local wrapper component or keep that boundary on React.
 - React Server Component children cannot yet render as slots inside an Octane
   island.
+- The React host uses `display: contents`. It does not add a flex or grid item,
+  but selectors and box styles applied to the boundary node itself, including
+  parent `> * + *` spacing utilities, still target that boxless host. Keep a
+  server-owned layout wrapper immediately outside an island when the parent
+  styles its direct children.
 - Automatic mode keeps boundaries importing React's `ViewTransition` on React
   because connected transitions require one renderer to own the coordination
   graph. Add `"use octane"` only when isolated Octane transition semantics are

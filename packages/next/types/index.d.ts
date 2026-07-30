@@ -27,7 +27,7 @@ export interface OctaneNextOptions {
 	/**
 	 * `"all"` considers every `.tsx` `"use client"` boundary and keeps
 	 * incompatible boundaries on React. `"directive"` compiles only modules
-	 * marked with `"use octane"`.
+	 * marked with `"use octane"` and is the default.
 	 */
 	clientComponents?: 'directive' | 'all';
 	/** Emit a warning for each automatic boundary that remains on React. */

@@ -153,7 +153,7 @@ function escapeRegExp(value) {
  */
 export function createOctanePlugin(options = {}) {
 	const {
-		clientComponents = 'all',
+		clientComponents = 'directive',
 		diagnostics = process.env.OCTANE_NEXT_DIAGNOSTICS === '1',
 		profile = false,
 		runtime = 'hybrid',
@@ -296,9 +296,8 @@ export function createOctanePlugin(options = {}) {
 /**
  * Apply the zero-configuration Octane integration to a Next config.
  *
- * Every application `.tsx` `"use client"` boundary is considered for Octane
- * compilation. Boundaries that the plugin cannot prove compatible remain on
- * React, and `"use react"` is the explicit escape hatch.
+ * Application `.tsx` boundaries opt into Octane with `"use octane"`. React
+ * remains the default until an explicitly owned island enters the client graph.
  */
 export function withOctane(nextConfig = {}) {
 	return createOctanePlugin()(nextConfig);

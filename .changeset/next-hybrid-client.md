@@ -8,9 +8,10 @@ boundaries marked with `"use client"` and `"use octane"`, then hosts their
 Octane component exports through the React-compatible island bridge. An
 automatic mode migrates every direct `"use client"` boundary, rewrites supported
 named React imports, and provides `"use react"` as a per-boundary escape hatch.
-Automatic migration is the zero-configuration default: incompatible boundaries
-quietly remain on React, optional diagnostics explain each fallback, and
-`createOctanePlugin()` exposes advanced selection and profiling controls.
+Directive ownership is the zero-configuration default so Octane is loaded only
+for explicitly owned boundaries. Automatic migration remains available through
+`createOctanePlugin({ clientComponents: "all" })`, with optional diagnostics
+and `"use react"` escape hatches.
 Connected React `ViewTransition` boundaries remain React-owned automatically;
 explicit `"use octane"` ownership can opt into isolated Octane transition
 semantics.

@@ -186,10 +186,40 @@ describe('withOctane', () => {
 		expect(config.turbopack?.resolveExtensions).toEqual(['.tsrx', '.tsx', '.ts', '.js']);
 	});
 
-	it('selects every use-client boundary with zero Octane configuration', () => {
+	it('selects only use-octane boundaries with zero Octane configuration', () => {
 		const config = withOctane({ cacheComponents: true });
 		const typedRules = config.turbopack?.rules?.['*.tsx'] as
 			Array<{ condition: unknown; loaders: unknown }> | undefined;
+		expect(typedRules).toHaveLength(4);
+		for (const rule of typedRules ?? []) {
+			const sourceCondition = (
+				rule.condition as {
+					all: Array<string | { content: RegExp }>;
+				}
+			).all[3] as { content: RegExp };
+			expect(sourceCondition.content.test(`'use client';\nexport function Counter() {}`)).toBe(
+				false,
+			);
+			expect(sourceCondition.content.test(`'use octane';\nexport function Counter() {}`)).toBe(
+				true,
+			);
+			expect(rule.loaders).toEqual([
+				expect.objectContaining({
+					options: expect.objectContaining({
+						clientComponents: 'directive',
+					}),
+				}),
+			]);
+		}
+	});
+
+	it('keeps automatic use-client selection available as an explicit mode', () => {
+		const config = createOctanePlugin({ clientComponents: 'all' })({
+			cacheComponents: true,
+		});
+		const typedRules = config.turbopack?.rules?.['*.tsx'] as
+			Array<{ condition: unknown; loaders: unknown }> | undefined;
+
 		expect(typedRules).toHaveLength(4);
 		for (const rule of typedRules ?? []) {
 			const sourceCondition = (
@@ -200,11 +230,6 @@ describe('withOctane', () => {
 			expect(
 				sourceCondition.any.some(({ content }) =>
 					content.test(`'use client';\nexport function Counter() {}`),
-				),
-			).toBe(true);
-			expect(
-				sourceCondition.any.some(({ content }) =>
-					content.test(`'use octane';\nexport function Counter() {}`),
 				),
 			).toBe(true);
 			expect(rule.loaders).toEqual([
@@ -245,7 +270,7 @@ describe('withOctane', () => {
 				expect.objectContaining({
 					loaders: [
 						expect.objectContaining({
-							options: expect.objectContaining({ clientComponents: 'all' }),
+							options: expect.objectContaining({ clientComponents: 'directive' }),
 						}),
 					],
 				}),
@@ -256,7 +281,7 @@ describe('withOctane', () => {
 				expect.objectContaining({
 					loaders: [
 						expect.objectContaining({
-							options: expect.objectContaining({ clientComponents: 'all' }),
+							options: expect.objectContaining({ clientComponents: 'directive' }),
 						}),
 					],
 				}),
