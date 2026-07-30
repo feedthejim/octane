@@ -1,0 +1,33 @@
+{
+  "name": "next-app-router-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Next.js App Router and Cache Components hosting Octane client components through Turbopack",
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "prebuild": "pnpm --filter octane build",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "typecheck": "tsrx-tsc --noEmit -p tsconfig.json",
+    "bench:client-runtime": "node perf/run.mjs",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e": "pnpm test:e2e"
+  },
+  "dependencies": {
+    "@octanejs/next": "workspace:*",
+    "next": "^16.2.0",
+    "octane": "workspace:*",
+    "react": "catalog:default",
+    "react-dom": "catalog:default"
+  },
+  "devDependencies": {
+    "@playwright/test": "catalog:default",
+    "@tsrx/typescript-plugin": "catalog:default",
+    "@types/node": "catalog:default",
+    "@types/react": "catalog:default",
+    "@types/react-dom": "catalog:default",
+    "babel-plugin-react-compiler": "1.0.0",
+    "typescript": "catalog:default"
+  }
+}

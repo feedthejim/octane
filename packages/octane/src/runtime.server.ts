@@ -2957,7 +2957,15 @@ export function ssrInNamespace(namespace: 'html' | 'svg' | 'mathml', render: () 
 // render their children whichever dialect authored the parent.
 function ssrChildrenHtml(children: unknown, scope: SSRScope): string {
 	if (typeof children === 'function') return (children as any)(undefined, scope) ?? '';
-	return ssrChild(children, scope);
+	// Boundary bodies already contribute the childSlot range that wraps this
+	// content. A value-position descriptor's ssrChild() adds that same range, so
+	// retaining it here gives the server one more nested pair than the client:
+	// hydration adopts the outer pair, sees the inner pair where it expects the
+	// descriptor's host, and appends a duplicate host beside the server copy.
+	// ssrChild() guarantees exactly one outer pair whenever markers are enabled;
+	// remove only that pair and preserve every nested component/list range.
+	const framed = ssrChild(children, scope);
+	return MARKERS ? framed.slice(BLOCK_OPEN.length, framed.length - BLOCK_CLOSE.length) : framed;
 }
 
 function streamTokenForPendingHtml(html: string): string | null {

@@ -1,4 +1,4 @@
-import { use, useId, useLayoutEffect, useRef, useState } from 'octane';
+import { use, useId, useLayoutEffect, useRef, useState, ViewTransition } from 'octane';
 
 /**
  * Phase 4 islands, compiled BOTH ways: the client project imports this module
@@ -17,6 +17,13 @@ export function SsrGreeting(props) @{
 export function SsrIdIsland() @{
 	const id = useId();
 	<p class="ssr-id" data-oid={id}>{'id island'}</p>
+}
+
+/** A boundary builtin must adopt its one server child instead of appending it. */
+export function SsrViewTransition() {
+	return <ViewTransition name="hosted-photo" update="none" share="none">
+		<p class="ssr-view-transition">{'one photo'}</p>
+	</ViewTransition>;
 }
 
 /** Reads a REAL React context object handed through props (§6.4 on the server). */

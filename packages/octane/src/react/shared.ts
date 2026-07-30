@@ -78,6 +78,13 @@ export const OPAQUE_HOST_SENTINEL_COMMENT = 'octane-compat-island';
 export const OPAQUE_HOST_SENTINEL = Object.freeze({
 	__html: `<!--${OPAQUE_HOST_SENTINEL_COMMENT}-->`,
 });
+/**
+ * The React-owned host is an ownership and lifecycle boundary, not a layout
+ * boundary. Keep the object stable so every island render reuses the same
+ * React style prop while the browser exposes the Octane-owned descendants to
+ * the surrounding formatting context.
+ */
+export const OPAQUE_HOST_STYLE = Object.freeze({ display: 'contents' as const });
 
 export interface TransportedChild {
 	type: ComponentBody;

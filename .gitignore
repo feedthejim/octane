@@ -2,6 +2,7 @@ node_modules
 dist
 dist-redact
 build
+.next
 .output
 *.tsbuildinfo
 .DS_Store

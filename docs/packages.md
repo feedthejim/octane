@@ -6,7 +6,7 @@ This inventory is derived from the manifests directly under `packages/`.
 Repository tooling imports the same discovery helper, so adding, renaming, or
 privatizing a package updates every package-wide check together.
 
-**54 publishable package(s), including 43 framework binding(s).**
+**55 publishable package(s), including 43 framework binding(s).**
 
 All publishable packages share the enforced Node.js engine baseline `>=22`.
 
@@ -32,6 +32,7 @@ All publishable packages share the enforced Node.js engine baseline `>=22`.
 | `@octanejs/mcp-server` | [`packages/octane-mcp-server`](../packages/octane-mcp-server) | agent tooling | `0.2.8` | 2 |
 | `@octanejs/mdx` | [`packages/mdx`](../packages/mdx) | framework binding | `0.1.14` | 4 |
 | `@octanejs/motion` | [`packages/motion`](../packages/motion) | framework binding | `0.1.16` | 1 |
+| `@octanejs/next` | [`packages/next`](../packages/next) | metaframework | `0.0.0` | 3 |
 | `@octanejs/nuqs` | [`packages/nuqs`](../packages/nuqs) | framework binding | `0.1.6` | 7 |
 | `@octanejs/radix` | [`packages/radix`](../packages/radix) | framework binding | `0.1.16` | 1 |
 | `@octanejs/recharts` | [`packages/recharts`](../packages/recharts) | framework binding | `0.1.14` | 1 |

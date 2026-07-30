@@ -892,6 +892,12 @@ class OctaneBundlerCompiler {
 				dev,
 				profile,
 				profileFilename,
+				...(options.migrateReactImports === undefined
+					? null
+					: { migrateReactImports: options.migrateReactImports }),
+				...(options.reactHostedBoundary === undefined
+					? null
+					: { reactHostedBoundary: options.reactHostedBoundary }),
 				...(universalRuntime === undefined ? null : { universalRuntime }),
 				// Keep the established DOM compiler call byte-for-byte equivalent. A
 				// renderer descriptor is an orthogonal compiler input only for the

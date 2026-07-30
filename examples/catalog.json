@@ -633,6 +633,40 @@
       ]
     },
     {
+      "directory": "examples/next-app-router",
+      "id": "next-app-router",
+      "title": "Next.js App Router",
+      "summary": "An upstream Next.js App Router application proving Turbopack-compiled Octane client boundaries inside Cache Components and partial prerendering.",
+      "status": "experimental",
+      "host": "react",
+      "renderModes": ["streaming-ssr", "hydration"],
+      "dialects": ["tsx", "tsrx"],
+      "bindings": [],
+      "octaneFeatures": [
+        "automatic-client-migration",
+        "cache-components",
+        "hydration",
+        "native-events",
+        "octane-compat",
+        "partial-prerendering",
+        "react-host",
+        "react-escape",
+        "transitions",
+        "turbopack"
+      ],
+      "commands": { "build": ["build"], "typecheck": "typecheck", "e2e": "test:e2e" },
+      "journeys": [
+        {
+          "id": "app-router-cache-hydration",
+          "title": "Stream a cached App Router shell and hydrate an interactive Octane client boundary",
+          "kind": "ssr-hydration",
+          "spec": "e2e/next-app-router.spec.ts",
+          "critical": true
+        }
+      ],
+      "faultScenarios": []
+    },
+    {
       "directory": "examples/pagecraft",
       "id": "pagecraft",
       "title": "Pagecraft",

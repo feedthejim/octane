@@ -2565,6 +2565,435 @@ function allocCompilerName(ctx, preferred) {
 	return name;
 }
 
+function isConventionallyNamedComponent(name) {
+	return typeof name === 'string' && /^[A-Z]/.test(name);
+}
+
+function isFunctionValue(node) {
+	const value = unwrapTsExpr(node);
+	return (
+		value?.type === 'FunctionDeclaration' ||
+		value?.type === 'FunctionExpression' ||
+		value?.type === 'ArrowFunctionExpression'
+	);
+}
+
+function isHostedComponentFactory(node, imports) {
+	const value = unwrapTsExpr(node);
+	if (value?.type !== 'CallExpression') return false;
+	const callee = unwrapTsExpr(value.callee);
+	let imported;
+	if (callee?.type === 'Identifier') {
+		imported = imports.locals.get(callee.name);
+	} else if (
+		callee?.type === 'MemberExpression' &&
+		callee.computed !== true &&
+		callee.object?.type === 'Identifier' &&
+		imports.namespaces.has(callee.object.name) &&
+		callee.property?.type === 'Identifier'
+	) {
+		imported = callee.property.name;
+	}
+	return imported === 'memo' || imported === 'lazy';
+}
+
+const REACT_HOSTED_DEFAULT_FACTORY = Symbol('reactHostedDefaultFactory');
+
+function topLevelComponentNames(ast) {
+	const names = new Set();
+	const imports = collectOctaneImportBindings(ast.body ?? []);
+	for (const statement of ast.body ?? []) {
+		const declaration =
+			statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration'
+				? statement.declaration
+				: statement;
+		if (
+			declaration?.id?.name &&
+			(functionProducesJsx(declaration) ||
+				(isConventionallyNamedComponent(declaration.id.name) && isFunctionValue(declaration)))
+		) {
+			names.add(declaration.id.name);
+		}
+		if (declaration?.type === 'VariableDeclaration') {
+			for (const item of declaration.declarations ?? []) {
+				if (
+					item.id?.type === 'Identifier' &&
+					(functionProducesJsx(unwrapTsExpr(item.init)) ||
+						(isConventionallyNamedComponent(item.id.name) && isFunctionValue(item.init)) ||
+						isHostedComponentFactory(item.init, imports))
+				) {
+					names.add(item.id.name);
+				}
+			}
+		}
+		if (
+			statement.type === 'ExportDefaultDeclaration' &&
+			isHostedComponentFactory(statement.declaration, imports)
+		) {
+			names.add(REACT_HOSTED_DEFAULT_FACTORY);
+		}
+	}
+	return names;
+}
+
+const REACT_HOSTED_IMPORTS = new Map([
+	[
+		'react',
+		new Set([
+			'Activity',
+			'Children',
+			'Fragment',
+			'Suspense',
+			'ViewTransition',
+			'addTransitionType',
+			'act',
+			'cloneElement',
+			'createContext',
+			'createElement',
+			'isValidElement',
+			'lazy',
+			'memo',
+			'startTransition',
+			'unstable_ViewTransition',
+			'unstable_addTransitionType',
+			'use',
+			'useActionState',
+			'useCallback',
+			'useContext',
+			'useDebugValue',
+			'useDeferredValue',
+			'useEffect',
+			'useEffectEvent',
+			'useId',
+			'useImperativeHandle',
+			'useInsertionEffect',
+			'useLayoutEffect',
+			'useMemo',
+			'useOptimistic',
+			'useReducer',
+			'useRef',
+			'useState',
+			'useSyncExternalStore',
+			'useTransition',
+		]),
+	],
+	[
+		'react-dom',
+		new Set([
+			'createPortal',
+			'flushSync',
+			'preconnect',
+			'prefetchDNS',
+			'preinit',
+			'preload',
+			'requestFormReset',
+			'useFormStatus',
+		]),
+	],
+]);
+
+/**
+ * Automatic Next client migration changes only authored React imports. The
+ * React facade import is appended after compilation and therefore remains
+ * React-owned. This is copy-on-write so parser ASTs and hydrate metadata stay
+ * immutable and share all unaffected subtrees.
+ */
+function migrateReactHostedImports(ast, enabled, filename) {
+	if (enabled !== true) return ast;
+	let nextBody = null;
+	const body = ast.body ?? [];
+	for (let index = 0; index < body.length; index++) {
+		const node = body[index];
+		let nextNode = node;
+		if (node.type === 'ImportDeclaration') {
+			const request = node.source?.value;
+			const supported = REACT_HOSTED_IMPORTS.get(request);
+			if (supported !== undefined) {
+				if ((node.specifiers?.length ?? 0) === 0) {
+					throw new Error(
+						`Automatic React migration does not support a side-effect-only ${JSON.stringify(request)} import (${filename}). Add "use react" to keep this boundary on React.`,
+					);
+				}
+				for (const specifier of node.specifiers ?? []) {
+					if (specifier.type === 'ImportDefaultSpecifier') {
+						throw new Error(
+							`Automatic React migration does not support a default ${request === 'react' ? 'React' : 'React DOM'} import (${filename}). Use named imports or add "use react" to keep this boundary on React.`,
+						);
+					}
+					if (specifier.type === 'ImportNamespaceSpecifier') {
+						throw new Error(
+							`Automatic React migration does not support a namespace ${request === 'react' ? 'React' : 'React DOM'} import (${filename}). Use named imports or add "use react" to keep this boundary on React.`,
+						);
+					}
+					const imported = specifier.imported?.name ?? specifier.imported?.value;
+					if (typeof imported !== 'string' || !supported.has(imported)) {
+						throw new Error(
+							`React API ${JSON.stringify(imported)} from ${JSON.stringify(request)} has no automatic Octane migration (${filename}). Add "use react" to keep this boundary on React.`,
+						);
+					}
+				}
+				nextNode = {
+					...node,
+					source: inheritOriginLoc(b.literal('octane', "'octane'"), node.source),
+				};
+			} else if (
+				typeof request === 'string' &&
+				(request.startsWith('react/') || request.startsWith('react-dom/'))
+			) {
+				throw new Error(
+					`Automatic React migration does not support imports from ${JSON.stringify(request)} (${filename}). Add "use react" to keep this boundary on React.`,
+				);
+			}
+		}
+		if (nextBody === null && nextNode !== node) nextBody = body.slice(0, index);
+		if (nextBody !== null) nextBody.push(nextNode);
+	}
+	return nextBody === null ? ast : { ...ast, body: nextBody };
+}
+
+function patternBindingNames(pattern, output = []) {
+	if (!pattern) return output;
+	if (pattern.type === 'Identifier') {
+		output.push(pattern.name);
+		return output;
+	}
+	if (pattern.type === 'RestElement') {
+		return patternBindingNames(pattern.argument, output);
+	}
+	if (pattern.type === 'AssignmentPattern') {
+		return patternBindingNames(pattern.left, output);
+	}
+	if (pattern.type === 'ArrayPattern') {
+		for (const element of pattern.elements ?? []) patternBindingNames(element, output);
+		return output;
+	}
+	if (pattern.type === 'ObjectPattern') {
+		for (const property of pattern.properties ?? []) {
+			patternBindingNames(property.argument ?? property.value, output);
+		}
+	}
+	return output;
+}
+
+function hostedExportName(node, filename) {
+	if (node?.type === 'Identifier') return node.name;
+	throw new Error(`React-hosted client boundaries require identifier export names (${filename}).`);
+}
+
+/**
+ * A host framework needs its own component ABI at the module export boundary,
+ * while nested calls inside the authored module must retain direct Octane
+ * component identities. Strip only the component exports, leave their local
+ * bindings untouched, and append React facades that pass those bindings
+ * through OctaneCompat. This runs before the module's one print.
+ */
+function applyReactHostedBoundary(body, componentNames, option, ctx, origin) {
+	if (option === undefined) return body;
+	if (
+		option === null ||
+		typeof option !== 'object' ||
+		typeof option.compatModule !== 'string' ||
+		option.compatModule.length === 0
+	) {
+		throw new TypeError(
+			'compile option reactHostedBoundary.compatModule must be a non-empty module specifier.',
+		);
+	}
+
+	const directives = [];
+	const rewritten = [];
+	const hostedExports = [];
+	const importedLocals = new Set();
+	for (const node of body) {
+		if (node.type !== 'ImportDeclaration' || node.importKind === 'type') continue;
+		for (const specifier of node.specifiers ?? []) {
+			if (specifier.importKind !== 'type' && specifier.local?.name) {
+				importedLocals.add(specifier.local.name);
+			}
+		}
+	}
+	const record = (exported, local, exportOrigin) => {
+		hostedExports.push({ exported, local, origin: exportOrigin });
+	};
+
+	for (const node of body) {
+		if (node.type === 'ExpressionStatement' && node.directive !== undefined) {
+			directives.push(node);
+			continue;
+		}
+		if (node.type === 'ExportAllDeclaration' && node.exportKind !== 'type') {
+			throw new Error(
+				`React-hosted client boundaries cannot classify export-star component ownership (${ctx.filename}). Define a local wrapper component instead.`,
+			);
+		}
+		if (node.type === 'ExportDefaultDeclaration') {
+			const declaration = node.declaration;
+			if (declaration?.type === 'Identifier' && importedLocals.has(declaration.name)) {
+				throw new Error(
+					`React-hosted client boundaries cannot classify an imported default export (${ctx.filename}). Define a local wrapper component instead.`,
+				);
+			}
+			if (declaration?.type === 'Identifier' && componentNames.has(declaration.name)) {
+				record('default', declaration.name, node);
+				continue;
+			}
+			if (
+				(declaration?.type === 'FunctionDeclaration' || declaration?.type === 'ClassDeclaration') &&
+				declaration.id?.name &&
+				componentNames.has(declaration.id.name)
+			) {
+				rewritten.push(declaration);
+				record('default', declaration.id.name, node);
+				continue;
+			}
+			if (componentNames.has(REACT_HOSTED_DEFAULT_FACTORY)) {
+				const local = allocCompilerName(ctx, '_$OctaneDefault');
+				rewritten.push(inheritOriginLoc(b.const(local, declaration), node));
+				record('default', local, node);
+				continue;
+			}
+			const value = unwrapTsExpr(declaration);
+			if (
+				value?.type === 'ArrowFunctionExpression' ||
+				value?.type === 'FunctionExpression' ||
+				(value?.type === 'FunctionDeclaration' && value.id == null)
+			) {
+				throw new Error(
+					`React-hosted client boundaries require a named default component so the Octane implementation can retain a local identity (${ctx.filename}).`,
+				);
+			}
+			rewritten.push(node);
+			continue;
+		}
+		if (node.type !== 'ExportNamedDeclaration' || node.exportKind === 'type') {
+			rewritten.push(node);
+			continue;
+		}
+		if (node.source != null) {
+			throw new Error(
+				`React-hosted client boundaries cannot classify component re-exports (${ctx.filename}). Define a local wrapper component instead.`,
+			);
+		}
+
+		const declaration = node.declaration;
+		if (declaration?.type === 'VariableDeclaration') {
+			const exportedValues = [];
+			let containsComponent = false;
+			for (const item of declaration.declarations ?? []) {
+				for (const name of patternBindingNames(item.id)) {
+					if (componentNames.has(name)) {
+						containsComponent = true;
+						record(name, name, item.id ?? node);
+					} else {
+						exportedValues.push(name);
+					}
+				}
+			}
+			if (containsComponent) {
+				rewritten.push(declaration);
+				if (exportedValues.length > 0) {
+					rewritten.push(
+						inheritOriginLoc(
+							b.export(
+								null,
+								exportedValues.map((name) => b.export_specifier(name)),
+							),
+							node,
+						),
+					);
+				}
+				continue;
+			}
+		} else if (
+			(declaration?.type === 'FunctionDeclaration' || declaration?.type === 'ClassDeclaration') &&
+			declaration.id?.name &&
+			componentNames.has(declaration.id.name)
+		) {
+			rewritten.push(declaration);
+			record(declaration.id.name, declaration.id.name, node);
+			continue;
+		}
+
+		if ((node.specifiers?.length ?? 0) > 0 && node.source == null) {
+			const retained = [];
+			for (const specifier of node.specifiers) {
+				const local = hostedExportName(specifier.local, ctx.filename);
+				const exported = hostedExportName(specifier.exported, ctx.filename);
+				if (
+					importedLocals.has(local) &&
+					(isConventionallyNamedComponent(local) || isConventionallyNamedComponent(exported))
+				) {
+					throw new Error(
+						`React-hosted client boundaries cannot classify an imported component export (${ctx.filename}). Define a local wrapper component instead.`,
+					);
+				}
+				if (componentNames.has(local)) {
+					record(exported, local, specifier);
+				} else {
+					retained.push(specifier);
+				}
+			}
+			if (retained.length !== node.specifiers.length) {
+				if (retained.length > 0) rewritten.push({ ...node, specifiers: retained });
+				continue;
+			}
+		}
+		rewritten.push(node);
+	}
+
+	if (!directives.some((node) => node.directive === 'use client')) {
+		throw new Error(
+			`React-hosted client-boundary compilation requires a leading "use client" directive (${ctx.filename}).`,
+		);
+	}
+	if (hostedExports.length === 0) return [...directives, ...rewritten];
+
+	const createElementName = allocCompilerName(ctx, '_$reactCreateElement');
+	const compatName = allocCompilerName(ctx, '_$OctaneCompat');
+	const imports = [
+		inheritOriginLoc(b.imports([['createElement', createElementName]], 'react'), origin),
+		inheritOriginLoc(b.imports([['OctaneCompat', compatName]], option.compatModule), origin),
+	];
+	const facades = [];
+	for (const entry of hostedExports) {
+		const wrapperName = allocCompilerName(
+			ctx,
+			entry.exported === 'default' ? '_$OctaneDefaultFacade' : `_$Octane${entry.exported}Facade`,
+		);
+		const propsName = allocCompilerName(ctx, '_$octaneProps');
+		facades.push(
+			inheritOriginLoc(
+				b.function_declaration(
+					b.id(wrapperName),
+					[b.id(propsName)],
+					b.block([
+						b.return(
+							b.call(
+								b.id(createElementName),
+								b.id(compatName),
+								b.object([
+									b.init('component', b.id(entry.local)),
+									b.init('props', b.id(propsName)),
+								]),
+							),
+						),
+					]),
+				),
+				entry.origin,
+			),
+		);
+		facades.push(
+			inheritOriginLoc(
+				entry.exported === 'default'
+					? b.export_default(b.id(wrapperName))
+					: b.export(null, [b.export_specifier(wrapperName, entry.exported)]),
+				entry.origin,
+			),
+		);
+	}
+	return [...directives, ...imports, ...rewritten, ...facades];
+}
+
 /**
  * Walk an AST subtree collecting Identifier references that are NOT bound
  * locally (inside the subtree). Tracks block/function scopes so inner `const`
@@ -5052,7 +5481,7 @@ function instrumentProfileComponents(ast, ctx) {
  * Compile a .tsrx source string into JS targeting `octane`.
  * @param {string} source
  * @param {string} filename
- * @param {{ hmr?: boolean | 'vite' | 'webpack', mode?: 'client' | 'server', dev?: boolean, profile?: boolean, profileFilename?: string, autoMemo?: boolean, inlineHookMemo?: boolean, renderer?: { id: string, module: string, target: 'dom' | 'universal', server?: string }, rendererBoundaries?: Readonly<Record<string, Readonly<Record<string, { ownerRenderer: string, childRenderer: string, prop: string, server?: string }>>>>, rendererRegistry?: Readonly<Record<string, { module: string, target: 'dom' | 'universal', server?: string }>>, clientOnlyImports?: readonly unknown[], __hydratePrepared?: boolean, __hydrateBoundaryModule?: boolean, __nativeChangeDiagnostics?: readonly unknown[], __nativeChangeAnalysis?: { diagnostics: readonly unknown[], classifications: Map<number, string> } }} [options] —
+ * @param {{ hmr?: boolean | 'vite' | 'webpack', mode?: 'client' | 'server', dev?: boolean, profile?: boolean, profileFilename?: string, autoMemo?: boolean, inlineHookMemo?: boolean, migrateReactImports?: boolean, reactHostedBoundary?: { compatModule: string }, renderer?: { id: string, module: string, target: 'dom' | 'universal', server?: string }, rendererBoundaries?: Readonly<Record<string, Readonly<Record<string, { ownerRenderer: string, childRenderer: string, prop: string, server?: string }>>>>, rendererRegistry?: Readonly<Record<string, { module: string, target: 'dom' | 'universal', server?: string }>>, clientOnlyImports?: readonly unknown[], __hydratePrepared?: boolean, __hydrateBoundaryModule?: boolean, __nativeChangeDiagnostics?: readonly unknown[], __nativeChangeAnalysis?: { diagnostics: readonly unknown[], classifications: Map<number, string> } }} [options] —
  *   `dev: true` emits client hydration source-location metadata (per-component
  *   `__s.locs`/`__s.locFile`) and, in server mode, source-located native-element
  *   scopes for invalid HTML nesting diagnostics. Both are strictly gated so
@@ -5319,6 +5748,7 @@ function compileInternal(source, filename, options, analyzedAst, mode, bundlerMe
 	// would leak invalid TS into the .js (or crash the printer). Runtime-only;
 	// Volar keeps them.
 	ast = { ...ast, body: dropTypeOnlyStatements(ast.body) };
+	ast = migrateReactHostedImports(ast, options?.migrateReactImports, filename);
 	const serverModuleInfo = analyzeServerModule(ast, filename);
 	// Normalize arrow-function components (`const X = () => @{…}`) to
 	// FunctionDeclaration form so the component pipeline recognizes them.
@@ -6256,6 +6686,21 @@ function compileInternal(source, filename, options, analyzedAst, mode, bundlerMe
 	// Built after HMR wiring so the import list includes `hmr`/`HMR` when needed.
 	const runtimeImportNodes = buildRuntimeImportNodes(ctx, 'octane', moduleOrigin);
 	const profileRuntimeImportNodes = buildProfileRuntimeImportNodes(ctx, moduleOrigin);
+	const moduleBody = [
+		...runtimeImportNodes,
+		...profileRuntimeImportNodes,
+		...vtHintNodes,
+		...delegateNodes,
+		...styleNodes,
+		...templateNodes,
+		...helperNodes,
+		...bodyNodes,
+		...stampNodes,
+		...hmrNodes,
+		...profileNodes,
+	];
+	const reactHostedComponentNames =
+		options?.reactHostedBoundary === undefined ? null : topLevelComponentNames(ast);
 
 	// ONE module AST, in the historical statement order, printed once — the
 	// print's decoded mappings ARE the module map (encoded below) and feed the
@@ -6263,19 +6708,13 @@ function compileInternal(source, filename, options, analyzedAst, mode, bundlerMe
 	const program = {
 		type: 'Program',
 		sourceType: 'module',
-		body: [
-			...runtimeImportNodes,
-			...profileRuntimeImportNodes,
-			...vtHintNodes,
-			...delegateNodes,
-			...styleNodes,
-			...templateNodes,
-			...helperNodes,
-			...bodyNodes,
-			...stampNodes,
-			...hmrNodes,
-			...profileNodes,
-		],
+		body: applyReactHostedBoundary(
+			moduleBody,
+			reactHostedComponentNames,
+			options?.reactHostedBoundary,
+			ctx,
+			moduleOrigin,
+		),
 		metadata: { path: [] },
 		start: ast.start,
 		end: ast.end,
@@ -6370,6 +6809,7 @@ function compileServer(source, filename, options, analyzedAst = null) {
 	// isTypeOnlyStatement) — same as the client path; the server HTML-string
 	// output is plain JS too.
 	ast = { ...ast, body: dropTypeOnlyStatements(ast.body) };
+	ast = migrateReactHostedImports(ast, options?.migrateReactImports, filename);
 	const serverModuleInfo = analyzeServerModule(ast, filename);
 	// Normalize arrow-function components (`const X = () => @{…}`) to
 	// FunctionDeclaration form so the component pipeline recognizes them.
@@ -6499,10 +6939,19 @@ function compileServer(source, filename, options, analyzedAst = null) {
 	flushTailHookSymbols(ctx);
 	const runtimeImportNodes = buildRuntimeImportNodes(ctx, 'octane/server', ctx._moduleOrigin);
 	const helperNodes = hoistedHelperNodes(ctx);
+	const moduleBody = [...runtimeImportNodes, ...helperNodes, ...bodyNodes];
+	const reactHostedComponentNames =
+		options?.reactHostedBoundary === undefined ? null : topLevelComponentNames(ast);
 	const program = {
 		type: 'Program',
 		sourceType: 'module',
-		body: [...runtimeImportNodes, ...helperNodes, ...bodyNodes],
+		body: applyReactHostedBoundary(
+			moduleBody,
+			reactHostedComponentNames,
+			options?.reactHostedBoundary,
+			ctx,
+			ctx._moduleOrigin,
+		),
 		metadata: { path: [] },
 		start: ast.start,
 		end: ast.end,

@@ -13,6 +13,7 @@ const SPECIAL_ROLES = new Map([
 	['@octanejs/rspeedy-plugin', 'native compiler integration'],
 	['@octanejs/rsbuild-plugin', 'metaframework'],
 	['@octanejs/vite-plugin', 'metaframework'],
+	['@octanejs/next', 'metaframework'],
 	// TanStack Start is a metaframework integration rather than a library
 	// binding, so it stays outside the binding status/catalog contract.
 	['@octanejs/tanstack-start', 'metaframework'],
@@ -35,6 +36,7 @@ const OCTANE_SINGLETON_CONSUMERS = new Set([
 	'@octanejs/rsbuild-plugin',
 	'@octanejs/tanstack-start',
 	'@octanejs/vite-plugin',
+	'@octanejs/next',
 ]);
 
 function readJson(file) {

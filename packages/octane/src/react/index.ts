@@ -58,6 +58,7 @@ import {
 import {
 	OPAQUE_HOST_SENTINEL,
 	OPAQUE_HOST_SENTINEL_COMMENT,
+	OPAQUE_HOST_STYLE,
 	REACT_CONTEXT_TAG,
 	resolveHostedIsland,
 	type OctaneCompatComponentProps,
@@ -616,6 +617,7 @@ export function OctaneCompat(
 	return React.createElement('div', {
 		'data-octane-compat': '',
 		ref: hostRef,
+		style: OPAQUE_HOST_STYLE,
 		// §9.3 opaque-host contract: the server writes real island HTML; the
 		// client ALWAYS supplies this stable frozen sentinel so React neither
 		// diffs nor clears the Octane-owned descendants — on any render, forever.

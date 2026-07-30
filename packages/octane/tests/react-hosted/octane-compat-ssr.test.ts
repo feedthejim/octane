@@ -27,6 +27,7 @@ import {
 	SsrLocallyGuarded as ClientSsrLocallyGuarded,
 	SsrStyled as ClientSsrStyled,
 	SsrThemed as ClientSsrThemed,
+	SsrViewTransition as ClientSsrViewTransition,
 } from './_fixtures/ssr-islands.tsrx';
 
 afterEach(() => __setHostFiberAdapterEnabled(true));
@@ -132,7 +133,9 @@ describe('octane/react/server — buffered SSR + client hydration (§9.3)', () =
 		const mounted = await hydratePage(serverPage, clientPage);
 		// The server host carries real island HTML.
 		expect(mounted.serverHtml).toContain('island iso');
+		expect(mounted.serverHtml).toContain('style="display:contents"');
 		const host = mounted.host();
+		expect(host.style.display).toBe('contents');
 		const serverButton = host.querySelector('.ssr-count');
 		expect(serverButton?.textContent).toBe('clicks:0');
 
@@ -183,6 +186,16 @@ describe('octane/react/server — buffered SSR + client hydration (§9.3)', () =
 
 		await reactAct(async () => (serverButton as HTMLElement).click());
 		expect(host.querySelector('.ssr-count')?.textContent).toBe('clicks:1');
+		await mounted.unmount();
+	});
+
+	it('hydrates a ViewTransition boundary without duplicating its adopted child', async () => {
+		const serverPage = h('main', null, h(OctaneCompatServer, null, h(server.SsrViewTransition)));
+		const clientPage = h('main', null, h(OctaneCompat, null, h(ClientSsrViewTransition as any)));
+
+		const mounted = await hydratePage(serverPage, clientPage);
+		expect(mounted.serverHtml.match(/one photo/g)).toHaveLength(1);
+		expect(mounted.host().querySelectorAll('.ssr-view-transition')).toHaveLength(1);
 		await mounted.unmount();
 	});
 

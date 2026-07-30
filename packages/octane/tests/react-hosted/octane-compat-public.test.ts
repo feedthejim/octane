@@ -52,6 +52,7 @@ describe('octane/react — mount, update, unmount', () => {
 		);
 		const host = mounted.host();
 		expect(host.parentElement?.tagName).toBe('MAIN');
+		expect(host.style.display).toBe('contents');
 		expect(host.querySelector('.greeting')?.textContent).toBe('Hello world');
 		expect(log.drain()).toEqual(['island-layout:world']);
 
@@ -621,7 +622,7 @@ describe('octane/react — StrictMode, hide/reveal, and teardown discrimination 
 			gate.resolve();
 			await gate.promise;
 		});
-		expect(host.style.display).not.toBe('none');
+		expect(host.style.display).toBe('contents');
 		await reactAct(async () => (host.querySelector('.count') as HTMLElement).click());
 		expect(host.querySelector('.count')?.textContent).toBe('count:2');
 
