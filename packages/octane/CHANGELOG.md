@@ -1,5 +1,11 @@
 # octane
 
+## 0.1.22
+
+### Patch Changes
+
+- 7a112b4: Reuse scoped JSX value records when host classification hands them directly to the host's child block, avoiding duplicate descriptor construction while preserving context-scoped resolution.
+
 ## 0.1.21
 
 ### Patch Changes
